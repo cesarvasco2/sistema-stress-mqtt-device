@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MQTT Stress Platform</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <h1>MQTT Stress Platform</h1>
+        <p>Fluxo simplificado para operação de vários dispositivos simultâneos.</p>
+      </div>
+      <span class="badge">Broker: {{ mqtt_user }}@localhost:{{ mqtt_port }}</span>
+    </header>
+
+    <main class="grid">
+      <section class="card wide">
+        <h2>Passo a passo rápido</h2>
+        <ol class="steps">
+          <li><strong>Passo 1:</strong> Informe o dispositivo e publique/acompanhe mensagens.</li>
+          <li><strong>Passo 2:</strong> Cadastre comando no assistente (manual, tempo ou condição).</li>
+          <li><strong>Passo 3:</strong> Execute o comando ou deixe automático.</li>
+        </ol>
+      </section>
+
+      <section class="card">
+        <h2>Passo 1 — Publicação manual</h2>
+        <form id="publish-form" class="form-grid single-col">
+          <input required name="device_id" placeholder="ID do dispositivo (ex: device01)" />
+          <input required name="topic" placeholder="Tópico (ex: devices/device01/cmd)" />
+          <textarea required name="payload" placeholder='Payload (ex: {"cmd":"ping"})'></textarea>
+          <div class="inline">
+            <input type="number" min="0" max="2" value="0" name="qos" placeholder="QoS" />
+            <label><input type="checkbox" name="retain" /> Retain</label>
+          </div>
+          <button type="submit">Publicar agora</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Passo 1 — SUB monitorado</h2>
+        <form id="sub-form" class="inline">
+          <input required name="topic" placeholder="devices/+/telemetry" />
+          <button type="submit">Adicionar tópico SUB</button>
+        </form>
+        <ul id="subs"></ul>
+      </section>
+
+      <section class="card wide">
+        <h2>Passo 2 — Assistente de comandos</h2>
+        <form id="cmd-form" class="wizard">
+          <div class="wizard-step">
+            <h3>2.1 Identificação</h3>
+            <div class="form-grid">
+              <input required name="id" placeholder="ID único do comando (ex: cmd_reboot_1)" />
+              <input required name="name" placeholder="Nome amigável (ex: Reboot)" />
+              <input required name="device_id" placeholder="Dispositivo alvo (ex: device01)" />
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <h3>2.2 Mensagem de comando</h3>
+            <div class="form-grid">
+              <input required name="topic" placeholder="Tópico de envio (ex: devices/device01/cmd)" />
+              <textarea required name="payload" placeholder='Payload de comando (ex: {"cmd":"reboot"})'></textarea>
+            </div>
+          </div>
+
+          <div class="wizard-step">
+            <h3>2.3 Gatilho</h3>
+            <div class="form-grid">
+              <select name="trigger_type" id="trigger_type">
+                <option value="manual">Manual (executa quando clicar)</option>
+                <option value="interval">Por tempo (intervalo em segundos)</option>
+                <option value="condition">Por condição (baseado nos dados recebidos)</option>
+              </select>
+              <input type="number" name="interval_seconds" id="interval_seconds" placeholder="Intervalo (segundos)" disabled />
+            </div>
+            <div id="condition-fields" class="form-grid muted" aria-disabled="true">
+              <input name="condition_topic" id="condition_topic" placeholder="Tópico a observar" disabled />
+              <input name="condition_operator" id="condition_operator" placeholder="Operador (==, >, contains...)" disabled />
+              <input name="condition_value" id="condition_value" placeholder="Valor esperado" disabled />
+            </div>
+            <p id="cmd-help" class="hint">Dica: para comando manual, basta selecionar "Manual" e salvar.</p>
+            <p id="cmd-feedback" class="feedback" data-type="info"></p>
+          </div>
+
+          <button type="submit">Cadastrar comando</button>
+        </form>
+
+        <h3>Passo 3 — Comandos cadastrados</h3>
+        <table>
+          <thead><tr><th>ID</th><th>Dispositivo</th><th>Trigger</th><th>Tópico</th><th>Ação</th></tr></thead>
+          <tbody id="commands"></tbody>
+        </table>
+      </section>
+
+      <section class="card wide">
+        <h2>Dispositivos e tráfego</h2>
+        <table>
+          <thead><tr><th>Device</th><th>Status</th><th>Pacotes RX/TX</th><th>Bytes RX/TX</th><th>Último tópico</th><th>Último payload</th></tr></thead>
+          <tbody id="devices"></tbody>
+        </table>
+      </section>
+
+      <section class="card wide">
+        <h2>Eventos em tempo real</h2>
+        <pre id="events"></pre>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
