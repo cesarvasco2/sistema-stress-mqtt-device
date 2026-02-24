@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -10,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from amqtt.broker import Broker
+from amqtt.errors import BrokerError
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -22,13 +24,36 @@ DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
 MQTT_HOST = os.getenv("MQTT_HOST", "0.0.0.0")
-MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+REQUESTED_MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+ACTIVE_MQTT_PORT = REQUESTED_MQTT_PORT
 MQTT_USER = os.getenv("MQTT_USER", "admin")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "admin123")
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def mqtt_uri() -> str:
+    return f"mqtt://{MQTT_USER}:{MQTT_PASSWORD}@127.0.0.1:{ACTIVE_MQTT_PORT}/"
+
+
+def is_port_available(host: str, port: int) -> bool:
+    bind_host = "0.0.0.0" if host in {"0.0.0.0", "::"} else host
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((bind_host, port))
+        except OSError:
+            return False
+    return True
+
+
+def resolve_mqtt_port(host: str, preferred_port: int, max_attempts: int = 20) -> int:
+    for port in range(preferred_port, preferred_port + max_attempts):
+        if is_port_available(host, port):
+            return port
+    raise RuntimeError(f"Nenhuma porta MQTT livre encontrada entre {preferred_port} e {preferred_port + max_attempts - 1}")
 
 
 @dataclass
@@ -104,6 +129,12 @@ class DeviceRegistry:
                 "devices": [asdict(item) for item in self.devices.values()],
                 "commands": [asdict(item) for item in self.commands.values()],
                 "subscriptions": sorted(list(self.subscriptions)),
+                "mqtt": {
+                    "host": MQTT_HOST,
+                    "requested_port": REQUESTED_MQTT_PORT,
+                    "active_port": ACTIVE_MQTT_PORT,
+                    "user": MQTT_USER,
+                },
             }
 
 
@@ -137,7 +168,6 @@ class WsHub:
 registry = DeviceRegistry()
 hub = WsHub()
 broker: Broker | None = None
-broker_task: asyncio.Task | None = None
 scheduler_task: asyncio.Task | None = None
 subscriber_task: asyncio.Task | None = None
 
@@ -148,10 +178,10 @@ async def write_password_file() -> Path:
     return pwd
 
 
-async def create_broker() -> Broker:
+async def create_broker(port: int) -> Broker:
     passwd_file = await write_password_file()
     config = {
-        "listeners": {"default": {"type": "tcp", "bind": f"{MQTT_HOST}:{MQTT_PORT}"}},
+        "listeners": {"default": {"type": "tcp", "bind": f"{MQTT_HOST}:{port}"}},
         "sys_interval": 10,
         "topic-check": {"enabled": False},
         "auth": {"allow-anonymous": False, "password-file": str(passwd_file)},
@@ -163,8 +193,7 @@ async def mqtt_publish(topic: str, payload: str, qos: int = 0, retain: bool = Fa
     from amqtt.client import MQTTClient
 
     client = MQTTClient()
-    uri = f"mqtt://{MQTT_USER}:{MQTT_PASSWORD}@127.0.0.1:{MQTT_PORT}/"
-    await client.connect(uri)
+    await client.connect(mqtt_uri())
     await client.publish(topic, payload.encode("utf-8"), qos=qos, retain=retain)
     await client.disconnect()
 
@@ -172,11 +201,10 @@ async def mqtt_publish(topic: str, payload: str, qos: int = 0, retain: bool = Fa
 async def metrics_subscriber() -> None:
     from amqtt.client import MQTTClient
 
-    uri = f"mqtt://{MQTT_USER}:{MQTT_PASSWORD}@127.0.0.1:{MQTT_PORT}/"
     while True:
         client = MQTTClient()
         try:
-            await client.connect(uri)
+            await client.connect(mqtt_uri())
             await client.subscribe([("#", 0)])
             while True:
                 message = await client.deliver_message()
@@ -268,20 +296,32 @@ async def command_scheduler() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global broker, broker_task, scheduler_task, subscriber_task
-    broker = await create_broker()
-    broker_task = asyncio.create_task(broker.start())
-    await asyncio.sleep(0.6)
+    global broker, scheduler_task, subscriber_task, ACTIVE_MQTT_PORT
+
+    ACTIVE_MQTT_PORT = resolve_mqtt_port(MQTT_HOST, REQUESTED_MQTT_PORT)
+    broker = await create_broker(ACTIVE_MQTT_PORT)
+
+    try:
+        await broker.start()
+    except BrokerError as exc:
+        raise RuntimeError(f"Falha ao iniciar broker MQTT na porta {ACTIVE_MQTT_PORT}: {exc}") from exc
+
+    if ACTIVE_MQTT_PORT != REQUESTED_MQTT_PORT:
+        print(
+            f"[mqtt] Porta {REQUESTED_MQTT_PORT} ocupada. Broker iniciado em {ACTIVE_MQTT_PORT}. "
+            "Use MQTT_PORT para fixar outra porta."
+        )
+
     scheduler_task = asyncio.create_task(command_scheduler())
     subscriber_task = asyncio.create_task(metrics_subscriber())
+
     yield
+
     for task in [scheduler_task, subscriber_task]:
         if task:
             task.cancel()
     if broker:
         await broker.shutdown()
-    if broker_task:
-        broker_task.cancel()
 
 
 app = FastAPI(title="MQTT Stress Platform", version="1.0.0", lifespan=lifespan)
@@ -292,7 +332,15 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request, "mqtt_port": MQTT_PORT, "mqtt_user": MQTT_USER})
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "mqtt_port": ACTIVE_MQTT_PORT,
+            "mqtt_requested_port": REQUESTED_MQTT_PORT,
+            "mqtt_user": MQTT_USER,
+        },
+    )
 
 
 @app.get("/api/state")
