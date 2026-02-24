@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MQTT Stress Platform</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <h1>MQTT Stress Platform</h1>
+        <p>Broker interno + automações + monitoramento em tempo real.</p>
+      </div>
+      <div class="badge-wrap">
+        <span class="badge">Broker: {{ mqtt_user }}@localhost:{{ mqtt_port }}</span>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="card">
+        <h2>Publicar manualmente</h2>
+        <form id="publish-form" class="form-grid">
+          <input required name="device_id" placeholder="device_id" />
+          <input required name="topic" placeholder="devices/device01/cmd" />
+          <input required name="payload" placeholder='{"cmd":"ping"}' />
+          <input type="number" min="0" max="2" value="0" name="qos" placeholder="QoS" />
+          <label><input type="checkbox" name="retain" /> Retain</label>
+          <button>Publicar</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Assinaturas monitoradas</h2>
+        <form id="sub-form" class="inline">
+          <input required name="topic" placeholder="devices/+/telemetry" />
+          <button>Adicionar SUB</button>
+        </form>
+        <ul id="subs"></ul>
+      </section>
+
+      <section class="card wide">
+        <h2>Comandos (manual, por tempo, por condição)</h2>
+        <form id="cmd-form" class="form-grid">
+          <input required name="id" placeholder="cmd_reboot_1" />
+          <input required name="name" placeholder="Reboot" />
+          <input required name="device_id" placeholder="device01" />
+          <input required name="topic" placeholder="devices/device01/cmd" />
+          <input required name="payload" placeholder='{"cmd":"reboot"}' />
+          <select name="trigger_type">
+            <option value="manual">manual</option>
+            <option value="interval">interval</option>
+            <option value="condition">condition</option>
+          </select>
+          <input type="number" name="interval_seconds" placeholder="interval_seconds" />
+          <input name="condition_topic" placeholder="condition_topic" />
+          <input name="condition_operator" placeholder="==, >, contains..." />
+          <input name="condition_value" placeholder="condition_value" />
+          <button>Cadastrar comando</button>
+        </form>
+        <table>
+          <thead><tr><th>ID</th><th>Dispositivo</th><th>Trigger</th><th>Tópico</th><th>Ação</th></tr></thead>
+          <tbody id="commands"></tbody>
+        </table>
+      </section>
+
+      <section class="card wide">
+        <h2>Dispositivos e tráfego</h2>
+        <table>
+          <thead><tr><th>Device</th><th>Status</th><th>Pacotes RX/TX</th><th>Bytes RX/TX</th><th>Último tópico</th><th>Último payload</th></tr></thead>
+          <tbody id="devices"></tbody>
+        </table>
+      </section>
+
+      <section class="card wide">
+        <h2>Eventos em tempo real</h2>
+        <pre id="events"></pre>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
