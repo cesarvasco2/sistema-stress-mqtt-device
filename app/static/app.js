@@ -5,6 +5,7 @@ const eventsEl = document.getElementById("events");
 const triggerEl = document.getElementById("trigger_type");
 const intervalEl = document.getElementById("interval_seconds");
 const conditionWrapEl = document.getElementById("condition-fields");
+const cmdHelpEl = document.getElementById("cmd-help");
 const conditionEls = ["condition_topic", "condition_operator", "condition_value"].map((id) => document.getElementById(id));
 
 const state = { devices: [], commands: [], subscriptions: [] };
@@ -23,6 +24,10 @@ function toggleTriggerFields() {
     el.disabled = !conditionMode;
     if (!conditionMode) el.value = "";
   });
+
+  if (intervalMode) cmdHelpEl.textContent = "Dica: informe o intervalo em segundos para execução automática.";
+  else if (conditionMode) cmdHelpEl.textContent = "Dica: preencha tópico, operador e valor para disparo por condição.";
+  else cmdHelpEl.textContent = "Dica: para comando manual, basta selecionar 'Manual' e salvar.";
 }
 
 function logEvent(evt) {
@@ -82,6 +87,16 @@ document.getElementById("sub-form").addEventListener("submit", async (e) => {
 document.getElementById("cmd-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(e.target).entries());
+
+  if (data.trigger_type === "interval" && !data.interval_seconds) {
+    alert("Para gatilho por tempo, informe o intervalo em segundos.");
+    return;
+  }
+  if (data.trigger_type === "condition" && (!data.condition_topic || !data.condition_operator || !data.condition_value)) {
+    alert("Para gatilho por condição, preencha tópico, operador e valor esperado.");
+    return;
+  }
+
   data.interval_seconds = data.interval_seconds ? Number(data.interval_seconds) : null;
   data.qos = 0;
   data.retained = false;

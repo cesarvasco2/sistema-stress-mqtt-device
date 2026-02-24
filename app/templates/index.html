@@ -20,7 +20,7 @@
         <h2>Passo a passo rápido</h2>
         <ol class="steps">
           <li><strong>Passo 1:</strong> Informe o dispositivo e publique/acompanhe mensagens.</li>
-          <li><strong>Passo 2:</strong> Cadastre um comando no assistente (manual, tempo ou condição).</li>
+          <li><strong>Passo 2:</strong> Cadastre comando no assistente (manual, tempo ou condição).</li>
           <li><strong>Passo 3:</strong> Execute o comando ou deixe automático.</li>
         </ol>
       </section>
@@ -35,7 +35,7 @@
             <input type="number" min="0" max="2" value="0" name="qos" placeholder="QoS" />
             <label><input type="checkbox" name="retain" /> Retain</label>
           </div>
-          <button>Publicar agora</button>
+          <button type="submit">Publicar agora</button>
         </form>
       </section>
 
@@ -43,7 +43,7 @@
         <h2>Passo 1 — SUB monitorado</h2>
         <form id="sub-form" class="inline">
           <input required name="topic" placeholder="devices/+/telemetry" />
-          <button>Adicionar tópico SUB</button>
+          <button type="submit">Adicionar tópico SUB</button>
         </form>
         <ul id="subs"></ul>
       </section>
@@ -83,9 +83,10 @@
               <input name="condition_operator" id="condition_operator" placeholder="Operador (==, >, contains...)" disabled />
               <input name="condition_value" id="condition_value" placeholder="Valor esperado" disabled />
             </div>
+            <p id="cmd-help" class="hint">Dica: para comando manual, basta selecionar "Manual" e salvar.</p>
           </div>
 
-          <button>Cadastrar comando</button>
+          <button type="submit">Cadastrar comando</button>
         </form>
 
         <h3>Passo 3 — Comandos cadastrados</h3>
